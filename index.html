@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1e1e1e">
+  <title>Card Tracker</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Tab Bar ── -->
+<nav class="tab-bar">
+  <button data-tab="browse" class="active">Browse</button>
+  <button data-tab="pending">Pending <span id="pendingBadge" class="badge" style="display:none">0</span></button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<!-- ═══════════ BROWSE PANEL ═══════════ -->
+<div id="browsePanel" class="panel active">
+  <div class="control-group">
+    <label>Sport</label>
+    <select id="sportSelect"><option value="">-- Load catalog first --</option></select>
+
+    <label>Product</label>
+    <select id="productSelect"><option value="">--</option></select>
+
+    <label>Set</label>
+    <select id="setSelect"><option value="">--</option></select>
+  </div>
+
+  <div class="search-bar">
+    <input id="cardSearch" type="text" placeholder="Search player name...">
+  </div>
+
+  <div id="cardList" class="card-list">
+    <div class="empty-state">
+      <div class="icon">&#x1F4E6;</div>
+      <p>Load a catalog from the Settings tab to get started.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PENDING PANEL ═══════════ -->
+<div id="pendingPanel" class="panel">
+  <div id="pendingList" class="card-list">
+    <div class="empty-state">
+      <div class="icon">&#x2705;</div>
+      <p>No pending changes. Browse cards and tap to add them.</p>
+    </div>
+  </div>
+  <div style="padding:12px 16px; display:flex; gap:8px;">
+    <button id="exportBtn" class="btn btn-green" style="flex:1">Export Changes</button>
+    <button id="clearBtn" class="btn btn-red" style="flex:0 0 auto; width:100px;">Clear All</button>
+  </div>
+</div>
+
+<!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<div id="settingsPanel" class="panel">
+  <div class="settings-section">
+    <h3>Catalog</h3>
+    <div id="catalogInfo" class="catalog-info">No catalog loaded.</div>
+    <input type="file" id="catalogFile" accept=".json" style="display:none">
+    <button id="loadCatalogBtn" class="btn">Load Catalog JSON</button>
+  </div>
+  <div class="settings-section">
+    <h3>Export</h3>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:12px;">
+      After adding cards, go to the Pending tab and tap Export to generate a
+      changes file you can bring back to your desktop.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════ ADD CARD SHEET ═══════════ -->
+<div id="sheetOverlay" class="sheet-overlay"></div>
+<div id="addSheet" class="sheet">
+  <div class="sheet-handle"></div>
+  <h3 id="sheetTitle">Add Card</h3>
+  <div id="sheetSubtitle" class="subtitle"></div>
+
+  <label>Parallel</label>
+  <div id="parallelPicker" class="tag-group"></div>
+
+  <label>Quantity</label>
+  <div class="stepper">
+    <button id="qtyDown">−</button>
+    <input id="qtyInput" class="qty" type="number" value="1" min="1" max="99">
+    <button id="qtyUp">+</button>
+  </div>
+
+  <label>Serial Number</label>
+  <input id="serialInput" type="text" placeholder="e.g. 23/50">
+
+  <label>Grade</label>
+  <select id="gradeSelect">
+    <option value="">Raw (ungraded)</option>
+    <option>PSA 10</option><option>PSA 9</option><option>PSA 8</option>
+    <option>BGS 10</option><option>BGS 9.5</option><option>BGS 9</option>
+    <option>SGC 10</option><option>CGC 10</option>
+  </select>
+
+  <label>Location</label>
+  <div id="locationPicker" class="tag-group"></div>
+
+  <label>Price Bucket</label>
+  <div id="pricePicker" class="tag-group"></div>
+
+  <label>Status</label>
+  <div id="statusPicker" class="tag-group"></div>
+
+  <label>Notes</label>
+  <input id="notesInput" type="text" placeholder="Optional notes...">
+
+  <div style="margin-top:20px">
+    <button id="confirmAddBtn" class="btn btn-green">Add Card</button>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

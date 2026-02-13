@@ -1,0 +1,12 @@
+{
+  "name": "Card Tracker",
+  "short_name": "Cards",
+  "description": "Sports card collection tracker",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1e1e1e",
+  "theme_color": "#1e1e1e",
+  "icons": [
+    { "src": "icons/icon-192.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
