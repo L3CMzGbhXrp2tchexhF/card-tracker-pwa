@@ -177,7 +177,7 @@ function onSportChanged() {
   const sport = sportSelect.value;
   const products = catalog.products
     .filter(p => !sport || p.sport === sport)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => b.year.localeCompare(a.year) || a.name.localeCompare(b.name));
   productSelect.innerHTML = '<option value="">-- Select Product --</option>' +
     products.map((p, i) => `<option value="${i}" data-sport="${esc(p.sport)}">${esc(p.year)} ${esc(p.name)}</option>`).join('');
   // Store filtered products for index lookup
@@ -527,7 +527,7 @@ function onSessSportChanged() {
   const sport = sessSportSelect.value;
   const products = catalog.products
     .filter(p => !sport || p.sport === sport)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => b.year.localeCompare(a.year) || a.name.localeCompare(b.name));
   sessProductSelect.innerHTML = '<option value="">-- Select Product --</option>' +
     products.map((p, i) => `<option value="${i}">${esc(p.year)} ${esc(p.name)}</option>`).join('');
   sessProductSelect._products = products;

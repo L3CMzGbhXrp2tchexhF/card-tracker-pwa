@@ -208,6 +208,22 @@ label:first-child { margin-top: 0; }
   color: #fff;
 }
 
+/* ── Sheet top row (qty + add) ── */
+.sheet-top-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.sheet-top-row > div { flex: 1; }
+.sheet-top-row > div > label { margin-top: 0; }
+.sheet-add-btn {
+  width: auto;
+  padding: 10px 24px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
 /* ── Quantity stepper ── */
 .stepper {
   display: flex;

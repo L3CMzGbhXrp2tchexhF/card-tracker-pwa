@@ -147,15 +147,20 @@
   <h3 id="sheetTitle">Add Card</h3>
   <div id="sheetSubtitle" class="subtitle"></div>
 
+  <div class="sheet-top-row">
+    <div>
+      <label>Quantity</label>
+      <div class="stepper">
+        <button id="qtyDown">−</button>
+        <input id="qtyInput" class="qty" type="number" value="1" min="1" max="99">
+        <button id="qtyUp">+</button>
+      </div>
+    </div>
+    <button id="confirmAddBtn" class="btn btn-green sheet-add-btn">Add</button>
+  </div>
+
   <label>Parallel</label>
   <div id="parallelPicker" class="tag-group"></div>
-
-  <label>Quantity</label>
-  <div class="stepper">
-    <button id="qtyDown">−</button>
-    <input id="qtyInput" class="qty" type="number" value="1" min="1" max="99">
-    <button id="qtyUp">+</button>
-  </div>
 
   <label>Serial Number</label>
   <input id="serialInput" type="text" placeholder="e.g. 23/50">
@@ -179,10 +184,6 @@
 
   <label>Notes</label>
   <input id="notesInput" type="text" placeholder="Optional notes...">
-
-  <div style="margin-top:20px">
-    <button id="confirmAddBtn" class="btn btn-green">Add Card</button>
-  </div>
 </div>
 
 <script type="module" src="app.js"></script>
