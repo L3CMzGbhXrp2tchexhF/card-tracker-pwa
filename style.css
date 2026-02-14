@@ -316,3 +316,133 @@ label:first-child { margin-top: 0; }
 }
 .empty-state .icon { font-size: 48px; }
 .empty-state p { font-size: 15px; line-height: 1.5; max-width: 280px; }
+
+/* ── Session mode ── */
+.sess-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.sess-header-info {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.sess-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.sess-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.sess-chip-loc {
+  background: rgba(74, 158, 255, 0.2);
+  color: var(--accent);
+}
+.sess-chip-count {
+  background: var(--green);
+  color: var(--green-text);
+}
+
+/* Horizontal scroll bars for parallels and sets */
+.sess-bar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--bg3);
+  padding: 6px 0;
+}
+.sess-chips-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 12px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.sess-chips-scroll::-webkit-scrollbar { display: none; }
+
+.sess-chip-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sess-chip-btn.active {
+  border-color: var(--accent);
+  background: rgba(74, 158, 255, 0.2);
+  color: #fff;
+}
+
+/* Session card row with add badge */
+.sess-card {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--bg3);
+  cursor: pointer;
+  gap: 10px;
+}
+.sess-card:active { background: var(--bg3); }
+.sess-card .card-num {
+  font-weight: 700;
+  font-size: 14px;
+  min-width: 44px;
+  color: var(--accent);
+}
+.sess-card .card-info { flex: 1; min-width: 0; }
+.sess-card .card-player { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sess-card .card-team { font-size: 12px; color: var(--text2); }
+.sess-card-badge {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--green);
+  color: var(--green-text);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+/* Undo floating button */
+.sess-undo-btn {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  padding: 10px 20px;
+  border-radius: 24px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 20;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.sess-undo-btn:active { background: var(--bg3); }

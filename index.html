@@ -16,6 +16,7 @@
 <!-- ── Tab Bar ── -->
 <nav class="tab-bar">
   <button data-tab="browse" class="active">Browse</button>
+  <button data-tab="session">Session</button>
   <button data-tab="pending">Pending <span id="pendingBadge" class="badge" style="display:none">0</span></button>
   <button data-tab="settings">Settings</button>
 </nav>
@@ -42,6 +43,69 @@
       <div class="icon">&#x1F4E6;</div>
       <p>Load a catalog from the Settings tab to get started.</p>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════ SESSION PANEL ═══════════ -->
+<div id="sessionPanel" class="panel">
+
+  <!-- Setup view (shown when no session active) -->
+  <div id="sessionSetup">
+    <div class="control-group">
+      <h3 style="margin-bottom:12px">Start a Session</h3>
+      <p style="font-size:13px; color:var(--text2); margin-bottom:16px;">
+        Pick a product and location, then rapidly tap cards to add them.
+      </p>
+
+      <label>Sport</label>
+      <select id="sessSportSelect"><option value="">--</option></select>
+
+      <label>Product</label>
+      <select id="sessProductSelect"><option value="">--</option></select>
+
+      <label>Default Parallel</label>
+      <select id="sessParallelSelect"><option value="">--</option></select>
+
+      <label>Location</label>
+      <div id="sessLocationPicker" class="tag-group"></div>
+
+      <div style="margin-top:20px">
+        <button id="startSessionBtn" class="btn btn-green">Start Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active view (shown during session) -->
+  <div id="sessionActive" style="display:none; flex-direction:column; height:100%">
+    <div class="sess-header">
+      <div class="sess-header-info">
+        <span id="sessProductLabel" class="sess-label"></span>
+        <span id="sessLocationLabel" class="sess-chip sess-chip-loc"></span>
+        <span id="sessCountLabel" class="sess-chip sess-chip-count">0 added</span>
+      </div>
+      <button id="endSessionBtn" class="btn btn-red" style="width:auto; padding:6px 12px; font-size:13px;">End</button>
+    </div>
+
+    <!-- Parallel quick-switcher -->
+    <div class="sess-bar">
+      <div id="sessParallelBar" class="sess-chips-scroll"></div>
+    </div>
+
+    <!-- Set tabs -->
+    <div class="sess-bar">
+      <div id="sessSetBar" class="sess-chips-scroll"></div>
+    </div>
+
+    <!-- Search within session -->
+    <div class="search-bar">
+      <input id="sessCardSearch" type="text" placeholder="Search player or card #...">
+    </div>
+
+    <!-- Card list -->
+    <div id="sessCardList" class="card-list"></div>
+
+    <!-- Undo button -->
+    <button id="undoBtn" class="sess-undo-btn" style="display:none">Undo</button>
   </div>
 </div>
 
