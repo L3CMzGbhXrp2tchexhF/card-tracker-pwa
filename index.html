@@ -63,8 +63,21 @@
       <label>Product</label>
       <select id="sessProductSelect"><option value="">--</option></select>
 
-      <label>Default Parallel</label>
-      <select id="sessParallelSelect"><option value="">--</option></select>
+      <label>Sets</label>
+      <p class="setup-hint">Tap to include in your session.</p>
+      <div class="multi-select-actions">
+        <button class="link-btn" id="sessSetSelectAll">Select All</button>
+        <button class="link-btn" id="sessSetClear">Clear</button>
+      </div>
+      <div id="sessSetPicker" class="tag-group"></div>
+
+      <label>Parallels</label>
+      <p class="setup-hint">Union of parallels across selected sets.</p>
+      <div class="multi-select-actions">
+        <button class="link-btn" id="sessParSelectAll">Select All</button>
+        <button class="link-btn" id="sessParClear">Clear</button>
+      </div>
+      <div id="sessParallelPicker" class="tag-group"></div>
 
       <label>Location</label>
       <div id="sessLocationPicker" class="tag-group"></div>
@@ -159,13 +172,13 @@
     <button id="confirmAddBtn" class="btn btn-green sheet-add-btn">Add</button>
   </div>
 
-  <label>Parallel</label>
+  <label>Parallel <button class="lock-btn" data-field="parallel" title="Lock">&#x1F513;</button></label>
   <div id="parallelPicker" class="tag-group"></div>
 
   <label>Serial Number</label>
   <input id="serialInput" type="text" placeholder="e.g. 23/50">
 
-  <label>Grade</label>
+  <label>Grade <button class="lock-btn" data-field="grade" title="Lock">&#x1F513;</button></label>
   <select id="gradeSelect">
     <option value="">Raw (ungraded)</option>
     <option>PSA 10</option><option>PSA 9</option><option>PSA 8</option>
@@ -173,17 +186,21 @@
     <option>SGC 10</option><option>CGC 10</option>
   </select>
 
-  <label>Location</label>
+  <label>Location <button class="lock-btn" data-field="location" title="Lock">&#x1F513;</button></label>
   <div id="locationPicker" class="tag-group"></div>
 
-  <label>Price Bucket</label>
+  <label>Price Bucket <button class="lock-btn" data-field="price_bucket" title="Lock">&#x1F513;</button></label>
   <div id="pricePicker" class="tag-group"></div>
 
-  <label>Status</label>
+  <label>Status <button class="lock-btn" data-field="status" title="Lock">&#x1F513;</button></label>
   <div id="statusPicker" class="tag-group"></div>
 
   <label>Notes</label>
   <input id="notesInput" type="text" placeholder="Optional notes...">
+
+  <div class="unlock-all-row">
+    <button id="unlockAllBtn" class="link-btn" style="display:none">Unlock All Fields</button>
+  </div>
 </div>
 
 <script type="module" src="app.js"></script>

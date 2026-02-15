@@ -1,4 +1,4 @@
-const CACHE_NAME = 'card-tracker-v3';
+const CACHE_NAME = 'card-tracker-v6';
 const ASSETS = [
   './',
   './index.html',

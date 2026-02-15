@@ -6,15 +6,27 @@ let pendingList = [];  // cached pending entries
 let currentCards = []; // cards displayed in the browse list
 let currentSet = null; // { name, type, prefix, cards, parallels } of the selected set
 let selectedCard = null; // card tapped for the add sheet
+let ownedMap = new Map(); // "product|set|card_number" → total qty across all parallels
+
+// Locked fields (browse mode only, session-only — not persisted)
+let lockedFields = {
+  parallel: null,      // { value: "Gold" } when locked, null when unlocked
+  grade: null,
+  location: null,
+  price_bucket: null,
+  status: null,
+};
 
 // Session state
 let session = {
   active: false,
-  location: null,    // tag name string
-  product: null,     // product object from catalog
-  parallel: null,    // current default parallel name
-  set: null,         // current set object
-  entries: [],       // [{card_number, set, parallel, id (pending db id)}]
+  location: null,        // tag name string
+  product: null,         // product object from catalog
+  selectedSets: [],      // set names chosen at setup
+  selectedParallels: [], // parallel names chosen at setup
+  activeSet: null,       // current set object (active tab)
+  activeParallel: null,  // current parallel name (active chip)
+  entries: [],           // [{card_number, set, parallel, id (pending db id)}]
 };
 let sessLongPressTimer = null;
 let sessSheetContext = null; // { card, set } when add-sheet opened from session long-press
@@ -31,10 +43,11 @@ const pendingListEl  = $('pendingList');
 const catalogInfo    = $('catalogInfo');
 
 // Session DOM refs
-const sessSportSelect    = $('sessSportSelect');
-const sessProductSelect  = $('sessProductSelect');
-const sessParallelSelect = $('sessParallelSelect');
-const sessLocationPicker = $('sessLocationPicker');
+const sessSportSelect     = $('sessSportSelect');
+const sessProductSelect   = $('sessProductSelect');
+const sessSetPicker       = $('sessSetPicker');
+const sessParallelPicker  = $('sessParallelPicker');
+const sessLocationPicker  = $('sessLocationPicker');
 const sessSetup          = $('sessionSetup');
 const sessActive         = $('sessionActive');
 const sessProductLabel   = $('sessProductLabel');
@@ -107,9 +120,23 @@ async function init() {
   $('exportBtn').addEventListener('click', onExport);
   $('clearBtn').addEventListener('click', onClearAll);
 
+  // Wire up lock buttons
+  document.querySelectorAll('.lock-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFieldLock(btn.dataset.field, btn);
+    });
+  });
+  $('unlockAllBtn').addEventListener('click', unlockAllFields);
+
   // Wire up session
   sessSportSelect.addEventListener('change', onSessSportChanged);
   sessProductSelect.addEventListener('change', onSessProductChanged);
+  $('sessSetSelectAll').addEventListener('click', () => { selectAllChips(sessSetPicker); onSessSetPickerChanged(); });
+  $('sessSetClear').addEventListener('click', () => { clearAllChips(sessSetPicker); onSessSetPickerChanged(); });
+  $('sessParSelectAll').addEventListener('click', () => { selectAllChips(sessParallelPicker); });
+  $('sessParClear').addEventListener('click', () => { clearAllChips(sessParallelPicker); });
   $('startSessionBtn').addEventListener('click', startSession);
   $('endSessionBtn').addEventListener('click', endSession);
   undoBtn.addEventListener('click', undoLastSessionAdd);
@@ -132,7 +159,7 @@ async function onCatalogFileSelected(e) {
     const text = await file.text();
     const data = JSON.parse(text);
     if (!data.products || !data.tags) {
-      alert('Invalid catalog file. Expected products and tags.');
+      showToast('Invalid catalog file. Expected products and tags.');
       return;
     }
     catalog = data;
@@ -140,18 +167,31 @@ async function onCatalogFileSelected(e) {
     onCatalogLoaded();
     switchTab('browse');
   } catch (err) {
-    alert('Failed to load catalog: ' + err.message);
+    showToast('Failed to load catalog: ' + err.message, 4000);
   }
   e.target.value = '';
 }
 
+function buildOwnedMap() {
+  ownedMap.clear();
+  if (!catalog || !catalog.collection) return;
+  for (const entry of catalog.collection) {
+    const cardKey = `${entry.product}|${entry.set}|${entry.card_number}`;
+    ownedMap.set(cardKey, (ownedMap.get(cardKey) || 0) + entry.quantity);
+  }
+}
+
 function onCatalogLoaded() {
+  buildOwnedMap();
+
   // Update catalog info display
   const nProducts = catalog.products.length;
   let nCards = 0;
   catalog.products.forEach(p => p.sets.forEach(s => { nCards += s.cards.length; }));
   const nTags = Object.values(catalog.tags).reduce((a, t) => a + t.length, 0);
+  const nOwned = ownedMap.size;
   catalogInfo.textContent = `Loaded: ${nProducts} products, ${nCards} cards, ${nTags} tags`;
+  if (nOwned > 0) catalogInfo.textContent += `, ${nOwned} owned`;
   if (catalog.exported_at) {
     catalogInfo.textContent += `\nExported: ${catalog.exported_at}`;
   }
@@ -245,16 +285,20 @@ function renderCards() {
     return;
   }
 
-  cardList.innerHTML = cards.map(c => `
-    <div class="card-item" data-number="${esc(c.number)}">
+  const product = setSelect._product;
+  cardList.innerHTML = cards.map(c => {
+    const owned = product ? (ownedMap.get(`${product.name}|${currentSet.name}|${c.number}`) || 0) : 0;
+    return `
+    <div class="card-item${owned > 0 ? ' owned' : ''}" data-number="${esc(c.number)}">
       <span class="card-num">${esc(c.number)}</span>
       <div class="card-info">
         <div class="card-player">${esc(c.player) || '(no player)'}</div>
         <div class="card-team">${esc(c.team)}</div>
       </div>
       ${c.rookie ? '<span class="card-rc">RC</span>' : ''}
-    </div>
-  `).join('');
+      ${owned > 0 ? `<span class="owned-badge">${owned}</span>` : ''}
+    </div>`;
+  }).join('');
 
   cardList.querySelectorAll('.card-item').forEach(el => {
     el.addEventListener('click', () => {
@@ -273,29 +317,49 @@ function openAddSheet(card) {
   const product = setSelect._product;
   sheetSubtitle.textContent = `${product.name} — ${currentSet.name}`;
 
-  // Parallels
+  // Parallels — respect locked value
   parallelPicker.innerHTML = currentSet.parallels.map(p => {
     const style = p.color_hex ? `border-color:${p.color_hex}` : '';
-    return `<div class="tag-chip${p.is_base ? ' selected' : ''}" data-value="${esc(p.name)}" style="${style}">${esc(p.name)}${p.serial_numbered ? ' /' + p.serial_numbered : ''}</div>`;
+    const shouldSelect = lockedFields.parallel
+      ? p.name === lockedFields.parallel.value
+      : p.is_base;
+    return `<div class="tag-chip${shouldSelect ? ' selected' : ''}" data-value="${esc(p.name)}" style="${style}">${esc(p.name)}${p.serial_numbered ? ' /' + p.serial_numbered : ''}</div>`;
   }).join('');
   wireTagGroup(parallelPicker);
 
-  // Auto-select base parallel
-  const baseChip = parallelPicker.querySelector('.tag-chip.selected');
-  if (!baseChip && parallelPicker.firstElementChild) {
-    parallelPicker.firstElementChild.classList.add('selected');
+  // Fallback: if nothing selected (locked parallel not in this set), select base/first
+  if (!parallelPicker.querySelector('.tag-chip.selected') && parallelPicker.firstElementChild) {
+    const base = parallelPicker.querySelector('.tag-chip[data-value]') || parallelPicker.firstElementChild;
+    // Prefer the base parallel
+    const baseChip = [...parallelPicker.querySelectorAll('.tag-chip')].find(c => {
+      const p = currentSet.parallels.find(pp => pp.name === c.dataset.value);
+      return p && p.is_base;
+    });
+    (baseChip || parallelPicker.firstElementChild).classList.add('selected');
   }
 
-  // Reset fields
+  // Reset non-lockable fields
   qtyInput.value = 1;
   serialInput.value = '';
-  gradeSelect.value = '';
   notesInput.value = '';
 
-  // Tags
+  // Grade — respect locked value
+  gradeSelect.value = lockedFields.grade ? lockedFields.grade.value : '';
+
+  // Tags — respect locked values
   buildTagPicker(locationPicker, catalog.tags.location || []);
+  if (lockedFields.location) preselectTag(locationPicker, lockedFields.location.value);
+
   buildTagPicker(pricePicker, catalog.tags.price_bucket || []);
+  if (lockedFields.price_bucket) preselectTag(pricePicker, lockedFields.price_bucket.value);
+
   buildTagPicker(statusPicker, catalog.tags.status || []);
+  if (lockedFields.status) preselectTag(statusPicker, lockedFields.status.value);
+
+  // Show lock buttons (may be hidden by session long-press) and sync visuals
+  document.querySelectorAll('.lock-btn').forEach(b => b.style.display = '');
+  updateLockButtons();
+  updateLockedVisuals();
 
   // Show sheet
   sheetOverlay.classList.add('visible');
@@ -332,13 +396,36 @@ function getSelected(container) {
   return sel ? sel.dataset.value : '';
 }
 
+// Multi-select: toggle on click instead of radio
+function wireMultiSelect(container, onChange) {
+  container.querySelectorAll('.tag-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('selected');
+      if (onChange) onChange();
+    });
+  });
+}
+
+function getMultiSelected(container) {
+  return [...container.querySelectorAll('.tag-chip.selected')]
+    .map(c => c.dataset.value);
+}
+
+function selectAllChips(container) {
+  container.querySelectorAll('.tag-chip').forEach(c => c.classList.add('selected'));
+}
+
+function clearAllChips(container) {
+  container.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('selected'));
+}
+
 // ── Confirm Add ──
 async function onConfirmAdd() {
   if (!selectedCard) return;
 
   const parallel = getSelected(parallelPicker);
   if (!parallel) {
-    alert('Please select a parallel.');
+    showToast('Please select a parallel.');
     return;
   }
 
@@ -387,6 +474,15 @@ async function onConfirmAdd() {
     undoBtn.style.display = 'block';
   }
 
+  // Update locked field values with current selections (in case user changed them)
+  if (!fromSession) {
+    Object.keys(lockedFields).forEach(field => {
+      if (lockedFields[field] !== null) {
+        lockedFields[field].value = getCurrentFieldValue(field);
+      }
+    });
+  }
+
   closeSheet();
 
   if (fromSession) {
@@ -400,6 +496,7 @@ function updatePendingBadge() {
   const count = pendingList.length;
   pendingBadge.style.display = count > 0 ? 'flex' : 'none';
   pendingBadge.textContent = count;
+  $('exportBtn').textContent = count > 0 ? `Export ${count} Changes` : 'Export Changes';
 }
 
 function renderPendingList() {
@@ -433,7 +530,7 @@ function renderPendingList() {
 // ── Export ──
 async function onExport() {
   if (!pendingList.length) {
-    alert('No pending changes to export.');
+    showToast('No pending changes to export.');
     return;
   }
 
@@ -457,7 +554,8 @@ async function onExport() {
 
   const jsonStr = JSON.stringify(exportData, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
-  const file = new File([blob], 'card_changes.json', { type: 'application/json' });
+  const filename = generateExportFilename(pendingList.length);
+  const file = new File([blob], filename, { type: 'application/json' });
 
   // Try Web Share API first (works on iOS Safari)
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -482,7 +580,7 @@ async function onExport() {
   box.style.cssText = 'background:var(--bg2); padding:16px; border-radius:12px; width:100%; max-width:400px; max-height:80vh; display:flex; flex-direction:column; gap:8px;';
   box.innerHTML = `
     <h3 style="color:var(--text)">Export JSON</h3>
-    <p style="font-size:13px; color:var(--text2);">${pendingList.length} changes. Copy the text below and save as a .json file.</p>
+    <p style="font-size:13px; color:var(--text2);">${pendingList.length} changes. Save as <strong style="color:var(--text)">${esc(filename)}</strong></p>
     <textarea class="export-area" style="flex:1; min-height:200px; width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-family:monospace; font-size:11px;" readonly></textarea>
     <button class="btn" id="copyExportBtn">Copy to Clipboard</button>
     <button class="btn btn-outline" id="closeExportBtn">Close</button>
@@ -537,14 +635,30 @@ function onSessSportChanged() {
 function onSessProductChanged() {
   const products = sessProductSelect._products || [];
   const idx = sessProductSelect.value;
-  if (idx === '' || !products[idx]) {
-    sessParallelSelect.innerHTML = '<option value="">--</option>';
-    return;
-  }
+  sessSetPicker.innerHTML = '';
+  sessParallelPicker.innerHTML = '';
+  if (idx === '' || !products[idx]) return;
+
   const product = products[idx];
-  // Collect unique parallels across all sets in this product, base first
+  // Populate set multi-select
+  sessSetPicker.innerHTML = product.sets.map(s =>
+    `<div class="tag-chip" data-value="${esc(s.name)}">${esc(s.name)} (${s.cards.length})</div>`
+  ).join('');
+  wireMultiSelect(sessSetPicker, onSessSetPickerChanged);
+}
+
+function onSessSetPickerChanged() {
+  const products = sessProductSelect._products || [];
+  const idx = sessProductSelect.value;
+  if (idx === '' || !products[idx]) return;
+  const product = products[idx];
+
+  const selectedSetNames = getMultiSelected(sessSetPicker);
+  const selectedSets = product.sets.filter(s => selectedSetNames.includes(s.name));
+
+  // Union of parallels across selected sets
   const seen = new Map();
-  product.sets.forEach(s => {
+  selectedSets.forEach(s => {
     s.parallels.forEach(p => {
       if (!seen.has(p.name)) seen.set(p.name, p);
     });
@@ -554,31 +668,44 @@ function onSessProductChanged() {
     if (!a.is_base && b.is_base) return 1;
     return a.name.localeCompare(b.name);
   });
-  sessParallelSelect.innerHTML = parallels.map(p =>
-    `<option value="${esc(p.name)}"${p.is_base ? ' selected' : ''}>${esc(p.name)}${p.serial_numbered ? ' /' + p.serial_numbered : ''}</option>`
-  ).join('');
+
+  // Preserve previous selections
+  const prevSelected = getMultiSelected(sessParallelPicker);
+
+  sessParallelPicker.innerHTML = parallels.map(p => {
+    const style = p.color_hex ? `border-color:${p.color_hex}` : '';
+    const sel = prevSelected.includes(p.name) ? ' selected' : '';
+    return `<div class="tag-chip${sel}" data-value="${esc(p.name)}" style="${style}">${esc(p.name)}${p.serial_numbered ? ' /' + p.serial_numbered : ''}</div>`;
+  }).join('');
+  wireMultiSelect(sessParallelPicker);
 }
 
 function startSession() {
-  if (!catalog) { alert('Load a catalog first.'); return; }
+  if (!catalog) { showToast('Load a catalog first.'); return; }
 
   const products = sessProductSelect._products || [];
   const idx = sessProductSelect.value;
-  if (idx === '' || !products[idx]) { alert('Select a product.'); return; }
+  if (idx === '' || !products[idx]) { showToast('Select a product.'); return; }
 
-  const parallel = sessParallelSelect.value;
-  if (!parallel) { alert('Select a default parallel.'); return; }
+  const selectedSetNames = getMultiSelected(sessSetPicker);
+  if (!selectedSetNames.length) { showToast('Select at least one set.'); return; }
+
+  const selectedParallelNames = getMultiSelected(sessParallelPicker);
+  if (!selectedParallelNames.length) { showToast('Select at least one parallel.'); return; }
 
   const loc = getSelected(sessLocationPicker);
-  if (!loc) { alert('Select a location.'); return; }
+  if (!loc) { showToast('Select a location.'); return; }
 
   const product = products[idx];
+  const selectedSets = product.sets.filter(s => selectedSetNames.includes(s.name));
 
   session.active = true;
   session.product = product;
-  session.parallel = parallel;
+  session.selectedSets = selectedSetNames;
+  session.selectedParallels = selectedParallelNames;
+  session.activeSet = selectedSets[0];
+  session.activeParallel = selectedParallelNames[0];
   session.location = loc;
-  session.set = product.sets[0] || null;
   session.entries = [];
 
   sessSetup.style.display = 'none';
@@ -589,8 +716,8 @@ function startSession() {
   sessLocationLabel.textContent = loc;
   sessCountLabel.textContent = '0 added';
 
-  renderSessionParallelBar();
   renderSessionSetBar();
+  renderSessionParallelBar();
   renderSessionCards();
 }
 
@@ -600,9 +727,11 @@ function endSession() {
 
   session.active = false;
   session.product = null;
-  session.parallel = null;
+  session.selectedSets = [];
+  session.selectedParallels = [];
+  session.activeSet = null;
+  session.activeParallel = null;
   session.location = null;
-  session.set = null;
   session.entries = [];
 
   sessActive.style.display = 'none';
@@ -614,20 +743,33 @@ function endSession() {
 }
 
 function renderSessionParallelBar() {
-  if (!session.product) return;
-  // Get parallels available in the current set (if set is selected), else all from product
-  const set = session.set;
-  const parallels = set ? set.parallels : [];
+  if (!session.product || !session.activeSet) return;
 
-  sessParallelBar.innerHTML = parallels.map(p => {
-    const active = p.name === session.parallel ? ' active' : '';
+  // Only show parallels that are in the user's selection AND exist in the active set
+  const setParallels = session.activeSet.parallels.filter(
+    p => session.selectedParallels.includes(p.name)
+  );
+
+  // If active parallel not available in this set, auto-switch
+  const activeExists = setParallels.some(p => p.name === session.activeParallel);
+  if (!activeExists && setParallels.length) {
+    session.activeParallel = setParallels[0].name;
+  }
+
+  if (!setParallels.length) {
+    sessParallelBar.innerHTML = '<span class="sess-no-match">No selected parallels in this set</span>';
+    return;
+  }
+
+  sessParallelBar.innerHTML = setParallels.map(p => {
+    const active = p.name === session.activeParallel ? ' active' : '';
     const style = p.color_hex ? `border-color:${p.color_hex}` : '';
     return `<button class="sess-chip-btn${active}" data-parallel="${esc(p.name)}" style="${style}">${esc(p.name)}${p.serial_numbered ? ' /' + p.serial_numbered : ''}</button>`;
   }).join('');
 
   sessParallelBar.querySelectorAll('.sess-chip-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      session.parallel = btn.dataset.parallel;
+      session.activeParallel = btn.dataset.parallel;
       sessParallelBar.querySelectorAll('.sess-chip-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     });
@@ -636,28 +778,20 @@ function renderSessionParallelBar() {
 
 function renderSessionSetBar() {
   if (!session.product) return;
-  const sets = session.product.sets;
+  // Only show sets the user selected at setup
+  const sets = session.product.sets.filter(s => session.selectedSets.includes(s.name));
 
   sessSetBar.innerHTML = sets.map(s => {
-    const active = session.set && s.name === session.set.name ? ' active' : '';
+    const active = session.activeSet && s.name === session.activeSet.name ? ' active' : '';
     return `<button class="sess-chip-btn${active}" data-set="${esc(s.name)}">${esc(s.name)} (${s.cards.length})</button>`;
   }).join('');
 
   sessSetBar.querySelectorAll('.sess-chip-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const setName = btn.dataset.set;
-      session.set = session.product.sets.find(s => s.name === setName) || null;
+      session.activeSet = session.product.sets.find(s => s.name === setName) || null;
       sessSetBar.querySelectorAll('.sess-chip-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      // Update parallel bar for the new set's available parallels
-      // Try to keep current parallel if it exists in the new set
-      if (session.set) {
-        const hasCurrentParallel = session.set.parallels.some(p => p.name === session.parallel);
-        if (!hasCurrentParallel && session.set.parallels.length) {
-          const base = session.set.parallels.find(p => p.is_base);
-          session.parallel = base ? base.name : session.set.parallels[0].name;
-        }
-      }
       renderSessionParallelBar();
       renderSessionCards();
     });
@@ -665,13 +799,22 @@ function renderSessionSetBar() {
 }
 
 function renderSessionCards() {
-  if (!session.set) {
+  if (!session.activeSet) {
     sessCardList.innerHTML = '<div class="empty-state"><p>Select a set above.</p></div>';
     return;
   }
 
+  // Check if any selected parallels exist in this set
+  const availableParallels = session.activeSet.parallels.filter(
+    p => session.selectedParallels.includes(p.name)
+  );
+  if (!availableParallels.length) {
+    sessCardList.innerHTML = '<div class="empty-state"><p>None of your selected parallels exist in this set.</p></div>';
+    return;
+  }
+
   const query = sessCardSearch.value.toLowerCase().trim();
-  let cards = session.set.cards;
+  let cards = session.activeSet.cards;
   if (query) {
     cards = cards.filter(c =>
       c.player.toLowerCase().includes(query) ||
@@ -695,7 +838,7 @@ function renderSessionCards() {
   });
 
   sessCardList.innerHTML = cards.map(c => {
-    const key = session.set.name + '|' + c.number;
+    const key = session.activeSet.name + '|' + c.number;
     const count = countMap[key] || 0;
     return `
       <div class="sess-card" data-number="${esc(c.number)}">
@@ -712,7 +855,7 @@ function renderSessionCards() {
   // Wire tap and long-press
   sessCardList.querySelectorAll('.sess-card').forEach(el => {
     const num = el.dataset.number;
-    const card = session.set.cards.find(c => c.number === num);
+    const card = session.activeSet.cards.find(c => c.number === num);
     if (!card) return;
 
     let longPressFired = false;
@@ -745,14 +888,14 @@ function renderSessionCards() {
 }
 
 async function onSessionCardTap(card) {
-  if (!session.active || !session.set) return;
+  if (!session.active || !session.activeSet) return;
 
   const entry = {
     action: 'add',
     product: session.product.name,
-    set: session.set.name,
+    set: session.activeSet.name,
     card_number: card.number,
-    parallel: session.parallel,
+    parallel: session.activeParallel,
     player: card.player,
     team: card.team,
     quantity: 1,
@@ -769,8 +912,8 @@ async function onSessionCardTap(card) {
 
   session.entries.push({
     card_number: card.number,
-    set: session.set.name,
-    parallel: session.parallel,
+    set: session.activeSet.name,
+    parallel: session.activeParallel,
     id: id,
   });
 
@@ -782,7 +925,7 @@ async function onSessionCardTap(card) {
   // Update the badge on this card's row without re-rendering everything
   const row = sessCardList.querySelector(`.sess-card[data-number="${CSS.escape(card.number)}"]`);
   if (row) {
-    const key = session.set.name + '|' + card.number;
+    const key = session.activeSet.name + '|' + card.number;
     const count = session.entries.filter(e => e.set + '|' + e.card_number === key).length;
     let badge = row.querySelector('.sess-card-badge');
     if (badge) {
@@ -793,21 +936,26 @@ async function onSessionCardTap(card) {
       badge.textContent = count;
       row.appendChild(badge);
     }
+    // Tap-flash
+    row.classList.remove('just-added');
+    void row.offsetWidth; // force reflow to restart animation
+    row.classList.add('just-added');
+    setTimeout(() => row.classList.remove('just-added'), 400);
   }
 }
 
 function onSessionCardLongPress(card) {
-  if (!session.active || !session.set) return;
+  if (!session.active || !session.activeSet) return;
 
-  sessSheetContext = { card, set: session.set };
+  sessSheetContext = { card, set: session.activeSet };
 
   selectedCard = card;
   sheetTitle.textContent = `#${card.number} ${card.player || ''}`;
-  sheetSubtitle.textContent = `${session.product.name} — ${session.set.name}`;
+  sheetSubtitle.textContent = `${session.product.name} — ${session.activeSet.name}`;
 
   // Parallels from current set
-  parallelPicker.innerHTML = session.set.parallels.map(p => {
-    const selected = p.name === session.parallel ? ' selected' : '';
+  parallelPicker.innerHTML = session.activeSet.parallels.map(p => {
+    const selected = p.name === session.activeParallel ? ' selected' : '';
     const style = p.color_hex ? `border-color:${p.color_hex}` : '';
     return `<div class="tag-chip${selected}" data-value="${esc(p.name)}" style="${style}">${esc(p.name)}${p.serial_numbered ? ' /' + p.serial_numbered : ''}</div>`;
   }).join('');
@@ -820,13 +968,13 @@ function onSessionCardLongPress(card) {
 
   // Tags — pre-select session location
   buildTagPicker(locationPicker, catalog.tags.location || []);
-  const locChip = locationPicker.querySelector(`.tag-chip[data-value="${CSS.escape(session.location)}"]`);
-  if (locChip) {
-    locationPicker.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('selected'));
-    locChip.classList.add('selected');
-  }
+  preselectTag(locationPicker, session.location);
   buildTagPicker(pricePicker, catalog.tags.price_bucket || []);
   buildTagPicker(statusPicker, catalog.tags.status || []);
+
+  // Hide lock buttons in session context (they only apply to browse mode)
+  document.querySelectorAll('.lock-btn').forEach(b => b.style.display = 'none');
+  $('unlockAllBtn').style.display = 'none';
 
   sheetOverlay.classList.add('visible');
   requestAnimationFrame(() => addSheet.classList.add('visible'));
@@ -844,6 +992,89 @@ async function undoLastSessionAdd() {
   if (!session.entries.length) undoBtn.style.display = 'none';
 
   renderSessionCards();
+}
+
+// ── Locked Fields ──
+function getCurrentFieldValue(field) {
+  switch (field) {
+    case 'parallel': return getSelected(parallelPicker);
+    case 'grade': return gradeSelect.value;
+    case 'location': return getSelected(locationPicker);
+    case 'price_bucket': return getSelected(pricePicker);
+    case 'status': return getSelected(statusPicker);
+    default: return '';
+  }
+}
+
+function toggleFieldLock(field, btn) {
+  if (lockedFields[field] !== null) {
+    lockedFields[field] = null;
+    btn.textContent = '\u{1F513}';
+    btn.classList.remove('locked');
+  } else {
+    lockedFields[field] = { value: getCurrentFieldValue(field) };
+    btn.textContent = '\u{1F512}';
+    btn.classList.add('locked');
+  }
+  updateLockedVisuals();
+}
+
+function updateLockButtons() {
+  document.querySelectorAll('.lock-btn').forEach(btn => {
+    const field = btn.dataset.field;
+    if (lockedFields[field] !== null) {
+      btn.textContent = '\u{1F512}';
+      btn.classList.add('locked');
+    } else {
+      btn.textContent = '\u{1F513}';
+      btn.classList.remove('locked');
+    }
+  });
+}
+
+function updateLockedVisuals() {
+  const anyLocked = Object.values(lockedFields).some(v => v !== null);
+  $('unlockAllBtn').style.display = anyLocked ? 'block' : 'none';
+  parallelPicker.classList.toggle('field-locked', lockedFields.parallel !== null);
+  gradeSelect.classList.toggle('field-locked', lockedFields.grade !== null);
+  locationPicker.classList.toggle('field-locked', lockedFields.location !== null);
+  pricePicker.classList.toggle('field-locked', lockedFields.price_bucket !== null);
+  statusPicker.classList.toggle('field-locked', lockedFields.status !== null);
+}
+
+function unlockAllFields() {
+  Object.keys(lockedFields).forEach(k => { lockedFields[k] = null; });
+  updateLockButtons();
+  updateLockedVisuals();
+}
+
+function preselectTag(container, value) {
+  container.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('selected'));
+  const target = container.querySelector(`.tag-chip[data-value="${CSS.escape(value)}"]`);
+  if (target) target.classList.add('selected');
+}
+
+// ── Toast ──
+function showToast(msg, duration = 2000) {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('visible');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('visible'), duration);
+}
+
+// ── Export Filename ──
+function generateExportFilename(count) {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 5).replace(':', '');
+  return `cards_${date}_${time}_${count}ch.json`;
 }
 
 // ── Helpers ──

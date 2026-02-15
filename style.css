@@ -158,6 +158,20 @@ label:first-child { margin-top: 0; }
   padding: 2px 5px;
   border-radius: 4px;
 }
+.owned-badge {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--green);
+  color: var(--green-text);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
 
 /* ── Add card sheet ── */
 .sheet-overlay {
@@ -462,3 +476,87 @@ label:first-child { margin-top: 0; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 .sess-undo-btn:active { background: var(--bg3); }
+
+/* Tap-flash on session card add */
+@keyframes tap-flash {
+  0% { background: rgba(74, 158, 255, 0.3); }
+  100% { background: transparent; }
+}
+.sess-card.just-added { animation: tap-flash 0.4s ease-out; }
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg2);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  z-index: 100;
+  border: 1px solid var(--border);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+.toast.visible { opacity: 1; }
+
+/* Lock toggle button */
+.lock-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  vertical-align: middle;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.lock-btn.locked { opacity: 1.0; }
+
+/* Locked field indicator */
+.tag-group.field-locked,
+select.field-locked {
+  border-left: 3px solid var(--accent);
+  padding-left: 4px;
+}
+
+.unlock-all-row {
+  margin-top: 16px;
+  text-align: center;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  text-decoration: underline;
+}
+
+/* Session setup multi-select */
+.setup-hint {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 4px;
+  margin-top: -2px;
+  padding: 0 4px;
+}
+.multi-select-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+/* Warning when no parallels match in a set */
+.sess-no-match {
+  font-size: 12px;
+  color: #cc6666;
+  padding: 4px 12px;
+  font-style: italic;
+}
