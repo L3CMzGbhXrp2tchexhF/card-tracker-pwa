@@ -177,7 +177,23 @@ function buildOwnedMap() {
   if (!catalog || !catalog.collection) return;
   for (const entry of catalog.collection) {
     const cardKey = `${entry.product}|${entry.set}|${entry.card_number}`;
-    ownedMap.set(cardKey, (ownedMap.get(cardKey) || 0) + entry.quantity);
+    const existing = ownedMap.get(cardKey);
+    if (existing) {
+      existing.qty += entry.quantity;
+      // Keep highest price / first grade found
+      if (!existing.median_price && entry.median_price) {
+        existing.median_price = entry.median_price;
+      }
+      if (!existing.grade && entry.grade) {
+        existing.grade = entry.grade;
+      }
+    } else {
+      ownedMap.set(cardKey, {
+        qty: entry.quantity,
+        median_price: entry.median_price || null,
+        grade: entry.grade || null,
+      });
+    }
   }
 }
 
@@ -190,8 +206,11 @@ function onCatalogLoaded() {
   catalog.products.forEach(p => p.sets.forEach(s => { nCards += s.cards.length; }));
   const nTags = Object.values(catalog.tags).reduce((a, t) => a + t.length, 0);
   const nOwned = ownedMap.size;
+  let nPriced = 0;
+  ownedMap.forEach(v => { if (v.median_price) nPriced++; });
   catalogInfo.textContent = `Loaded: ${nProducts} products, ${nCards} cards, ${nTags} tags`;
   if (nOwned > 0) catalogInfo.textContent += `, ${nOwned} owned`;
+  if (nPriced > 0) catalogInfo.textContent += `, ${nPriced} priced`;
   if (catalog.exported_at) {
     catalogInfo.textContent += `\nExported: ${catalog.exported_at}`;
   }
@@ -270,7 +289,8 @@ function renderCards() {
     cards = cards.filter(c =>
       c.player.toLowerCase().includes(query) ||
       c.number.toLowerCase().includes(query) ||
-      c.team.toLowerCase().includes(query)
+      c.team.toLowerCase().includes(query) ||
+      (c.card_name && c.card_name.toLowerCase().includes(query))
     );
   }
 
@@ -287,15 +307,19 @@ function renderCards() {
 
   const product = setSelect._product;
   cardList.innerHTML = cards.map(c => {
-    const owned = product ? (ownedMap.get(`${product.name}|${currentSet.name}|${c.number}`) || 0) : 0;
+    const ownedEntry = product ? ownedMap.get(`${product.name}|${currentSet.name}|${c.number}`) : null;
+    const owned = ownedEntry ? ownedEntry.qty : 0;
+    const displayName = c.player || c.card_name || '(no player)';
     return `
     <div class="card-item${owned > 0 ? ' owned' : ''}" data-number="${esc(c.number)}">
       <span class="card-num">${esc(c.number)}</span>
       <div class="card-info">
-        <div class="card-player">${esc(c.player) || '(no player)'}</div>
-        <div class="card-team">${esc(c.team)}</div>
+        <div class="card-player">${esc(displayName)}</div>
+        <div class="card-team">${esc(c.team)}${ownedEntry && ownedEntry.median_price ? ' <span class="card-price">$' + ownedEntry.median_price.toFixed(2) + '</span>' : ''}</div>
       </div>
+      ${c.sp ? '<span class="card-sp">SP</span>' : ''}
       ${c.rookie ? '<span class="card-rc">RC</span>' : ''}
+      ${ownedEntry && ownedEntry.grade ? `<span class="card-grade">${esc(ownedEntry.grade)}</span>` : ''}
       ${owned > 0 ? `<span class="owned-badge">${owned}</span>` : ''}
     </div>`;
   }).join('');
@@ -312,7 +336,7 @@ function renderCards() {
 // ── Add Card Sheet ──
 function openAddSheet(card) {
   selectedCard = card;
-  sheetTitle.textContent = `#${card.number} ${card.player || ''}`;
+  sheetTitle.textContent = `#${card.number} ${card.player || card.card_name || ''}`;
 
   const product = setSelect._product;
   sheetSubtitle.textContent = `${product.name} — ${currentSet.name}`;
@@ -819,7 +843,8 @@ function renderSessionCards() {
     cards = cards.filter(c =>
       c.player.toLowerCase().includes(query) ||
       c.number.toLowerCase().includes(query) ||
-      c.team.toLowerCase().includes(query)
+      c.team.toLowerCase().includes(query) ||
+      (c.card_name && c.card_name.toLowerCase().includes(query))
     );
   }
 
@@ -840,13 +865,15 @@ function renderSessionCards() {
   sessCardList.innerHTML = cards.map(c => {
     const key = session.activeSet.name + '|' + c.number;
     const count = countMap[key] || 0;
+    const displayName = c.player || c.card_name || '(no player)';
     return `
       <div class="sess-card" data-number="${esc(c.number)}">
         <span class="card-num">${esc(c.number)}</span>
         <div class="card-info">
-          <div class="card-player">${esc(c.player) || '(no player)'}</div>
+          <div class="card-player">${esc(displayName)}</div>
           <div class="card-team">${esc(c.team)}</div>
         </div>
+        ${c.sp ? '<span class="card-sp">SP</span>' : ''}
         ${c.rookie ? '<span class="card-rc">RC</span>' : ''}
         ${count > 0 ? `<span class="sess-card-badge">${count}</span>` : ''}
       </div>`;
@@ -950,7 +977,7 @@ function onSessionCardLongPress(card) {
   sessSheetContext = { card, set: session.activeSet };
 
   selectedCard = card;
-  sheetTitle.textContent = `#${card.number} ${card.player || ''}`;
+  sheetTitle.textContent = `#${card.number} ${card.player || card.card_name || ''}`;
   sheetSubtitle.textContent = `${session.product.name} — ${session.activeSet.name}`;
 
   // Parallels from current set
