@@ -119,6 +119,7 @@ async function init() {
   });
 
   // Wire up catalog loader
+  $('fetchCatalogBtn').addEventListener('click', onFetchCatalog);
   $('loadCatalogBtn').addEventListener('click', () => $('catalogFile').click());
   $('catalogFile').addEventListener('change', onCatalogFileSelected);
 
@@ -193,6 +194,49 @@ async function onCatalogFileSelected(e) {
     showToast('Failed to load catalog: ' + err.message, 4000);
   }
   e.target.value = '';
+}
+
+const CATALOG_URL = './data/catalog.json';
+
+async function onFetchCatalog() {
+  const btn = $('fetchCatalogBtn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Fetching...';
+  try {
+    const resp = await fetch(CATALOG_URL, { cache: 'no-cache' });
+    if (!resp.ok) {
+      if (resp.status === 404) {
+        showToast('No catalog deployed yet. Use the desktop app to deploy first.', 4000);
+      } else {
+        showToast(`Fetch failed: HTTP ${resp.status}`, 4000);
+      }
+      return;
+    }
+    const data = await resp.json();
+    if (!data.products || !data.tags) {
+      showToast('Invalid catalog. Expected products and tags.', 4000);
+      return;
+    }
+    const expectedVersion = 3;
+    if (data.format_version && data.format_version !== expectedVersion) {
+      showToast(`Warning: Catalog format version ${data.format_version} (expected ${expectedVersion}). Loading anyway...`, 4000);
+    }
+    catalog = data;
+    await putCatalog(catalog);
+    onCatalogLoaded();
+    switchTab('browse');
+
+    const nProducts = catalog.products.length;
+    let nCards = 0;
+    catalog.products.forEach(p => p.sets.forEach(s => { nCards += s.cards.length; }));
+    showToast(`Catalog loaded: ${nProducts} products, ${nCards} cards`, 3000);
+  } catch (err) {
+    showToast('Failed to fetch catalog: ' + err.message, 4000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
 }
 
 function buildOwnedMap() {
