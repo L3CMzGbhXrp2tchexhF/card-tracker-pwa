@@ -196,7 +196,7 @@ async function onCatalogFileSelected(e) {
   e.target.value = '';
 }
 
-const CATALOG_URL = './data/catalog.json';
+const CATALOG_URL = 'https://raw.githubusercontent.com/L3CMzGbhXrp2tchexhF/card-tracker-pwa/main/data/catalog.json';
 
 async function onFetchCatalog() {
   const btn = $('fetchCatalogBtn');
