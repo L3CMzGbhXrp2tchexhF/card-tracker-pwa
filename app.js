@@ -7,6 +7,7 @@ let currentCards = []; // cards displayed in the browse list
 let currentSet = null; // { name, type, prefix, cards, parallels } of the selected set
 let selectedCard = null; // card tapped for the add sheet
 let ownedMap = new Map(); // "product|set|card_number" → total qty across all parallels
+let searchDebounceTimer = null; // debounce timer for search input
 
 // Locked fields (browse mode only, session-only — not persisted)
 let lockedFields = {
@@ -77,11 +78,28 @@ async function init() {
   // Register service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
+
+    // Listen for SW update messages
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data && event.data.type === 'SW_UPDATED') {
+        showToast('New version available — tap to reload', 10000);
+        const toast = document.getElementById('toast');
+        if (toast) {
+          toast.style.cursor = 'pointer';
+          toast.addEventListener('click', () => window.location.reload());
+        }
+      }
+    });
   }
 
   // Request persistent storage
   if (navigator.storage && navigator.storage.persist) {
-    navigator.storage.persist();
+    navigator.storage.persist().then(granted => {
+      if (!granted) {
+        console.warn('Storage persistence was denied');
+        showToast('Warning: Storage persistence denied. Data may be cleared by the browser.', 4000);
+      }
+    });
   }
 
   // Load catalog from IndexedDB if previously saved
@@ -161,6 +179,11 @@ async function onCatalogFileSelected(e) {
     if (!data.products || !data.tags) {
       showToast('Invalid catalog file. Expected products and tags.');
       return;
+    }
+    // Check format_version
+    const expectedVersion = 3;
+    if (data.format_version && data.format_version !== expectedVersion) {
+      showToast(`Warning: Catalog format version ${data.format_version} (expected ${expectedVersion}). Loading anyway...`, 4000);
     }
     catalog = data;
     await putCatalog(catalog);
@@ -278,7 +301,10 @@ function onSetChanged() {
 
 // ── Search ──
 function onSearchInput() {
-  renderCards();
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    renderCards();
+  }, 150);
 }
 
 // ── Card Rendering ──
@@ -633,7 +659,8 @@ async function onExport() {
 
 async function onClearAll() {
   if (!pendingList.length) return;
-  if (!confirm(`Clear all ${pendingList.length} pending changes?`)) return;
+  const message = `You have ${pendingList.length} unexported changes. Clear anyway?`;
+  if (!confirm(message)) return;
   await clearAllPending();
   pendingList = [];
   updatePendingBadge();
@@ -933,41 +960,45 @@ async function onSessionCardTap(card) {
     added_at: new Date().toISOString(),
   };
 
-  const id = await addPending(entry);
-  entry.id = id;
-  pendingList.push(entry);
+  try {
+    const id = await addPending(entry);
+    entry.id = id;
+    pendingList.push(entry);
 
-  session.entries.push({
-    card_number: card.number,
-    set: session.activeSet.name,
-    parallel: session.activeParallel,
-    id: id,
-  });
+    session.entries.push({
+      card_number: card.number,
+      set: session.activeSet.name,
+      parallel: session.activeParallel,
+      id: id,
+    });
 
-  // Update UI
-  updatePendingBadge();
-  sessCountLabel.textContent = session.entries.length + ' added';
-  undoBtn.style.display = 'block';
+    // Update UI
+    updatePendingBadge();
+    sessCountLabel.textContent = session.entries.length + ' added';
+    undoBtn.style.display = 'block';
 
-  // Update the badge on this card's row without re-rendering everything
-  const row = sessCardList.querySelector(`.sess-card[data-number="${CSS.escape(card.number)}"]`);
-  if (row) {
-    const key = session.activeSet.name + '|' + card.number;
-    const count = session.entries.filter(e => e.set + '|' + e.card_number === key).length;
-    let badge = row.querySelector('.sess-card-badge');
-    if (badge) {
-      badge.textContent = count;
-    } else {
-      badge = document.createElement('span');
-      badge.className = 'sess-card-badge';
-      badge.textContent = count;
-      row.appendChild(badge);
+    // Update the badge on this card's row without re-rendering everything
+    const row = sessCardList.querySelector(`.sess-card[data-number="${CSS.escape(card.number)}"]`);
+    if (row) {
+      const key = session.activeSet.name + '|' + card.number;
+      const count = session.entries.filter(e => e.set + '|' + e.card_number === key).length;
+      let badge = row.querySelector('.sess-card-badge');
+      if (badge) {
+        badge.textContent = count;
+      } else {
+        badge = document.createElement('span');
+        badge.className = 'sess-card-badge';
+        badge.textContent = count;
+        row.appendChild(badge);
+      }
+      // Tap-flash
+      row.classList.remove('just-added');
+      void row.offsetWidth; // force reflow to restart animation
+      row.classList.add('just-added');
+      setTimeout(() => row.classList.remove('just-added'), 400);
     }
-    // Tap-flash
-    row.classList.remove('just-added');
-    void row.offsetWidth; // force reflow to restart animation
-    row.classList.add('just-added');
-    setTimeout(() => row.classList.remove('just-added'), 400);
+  } catch (err) {
+    showToast('Failed to add card: ' + err.message, 3000);
   }
 }
 

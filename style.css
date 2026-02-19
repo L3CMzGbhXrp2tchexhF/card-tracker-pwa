@@ -33,6 +33,7 @@ html, body {
   border-bottom: 1px solid var(--border);
   position: relative;
   z-index: 10;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .tab-bar button {
   flex: 1;
@@ -498,6 +499,7 @@ label:first-child { margin-top: 0; }
   cursor: pointer;
   z-index: 20;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 .sess-undo-btn:active { background: var(--bg3); }
 
@@ -526,6 +528,7 @@ label:first-child { margin-top: 0; }
   pointer-events: none;
   max-width: 90%;
   text-align: center;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 .toast.visible { opacity: 1; }
 
